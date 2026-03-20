@@ -115,12 +115,19 @@ async function startRecording(tabId) {
 
     } catch (err) {
         console.error('Mic error:', err);
-        sendToTab(tabId, {
-            action: 'error',
-            message: err.name === 'NotAllowedError'
-                ? 'Microphone access denied — check browser permissions'
-                : err.message || 'Failed to start recording'
-        });
+        if (err.name === 'NotAllowedError') {
+            // Open the mic permission prompt page
+            sendToTab(tabId, {
+                action: 'error',
+                message: 'Microphone permission needed — opening prompt...'
+            });
+            browser.tabs.create({ url: browser.runtime.getURL('mic-prompt.html') });
+        } else {
+            sendToTab(tabId, {
+                action: 'error',
+                message: err.message || 'Failed to start recording'
+            });
+        }
     }
 }
 

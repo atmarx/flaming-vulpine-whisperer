@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            padding: 1.5rem;
+            min-width: 300px;
+            text-align: center;
+        }
+        h2 { font-size: 1rem; font-weight: 400; margin-bottom: 0.75rem; }
+        p { font-size: 0.85rem; color: #888; margin-bottom: 1rem; }
+        button {
+            padding: 0.6rem 1.5rem;
+            border-radius: 8px;
+            border: none;
+            background: #e94560;
+            color: white;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+        button:hover { background: #ff6b6b; }
+        .ok { color: #4ecca3; display: none; }
+    </style>
+</head>
+<body>
+    <h2>Microphone Access</h2>
+    <p>Click below to allow Flaming Vulpine Whisperer to use your microphone.</p>
+    <button id="grant">Grant Microphone Access</button>
+    <p id="ok" class="ok">Granted! You can close this and start using Alt+R.</p>
+    <script>
+        document.getElementById('grant').addEventListener('click', async () => {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                stream.getTracks().forEach(t => t.stop());
+                document.getElementById('ok').style.display = 'block';
+                document.getElementById('grant').textContent = 'Done';
+                document.getElementById('grant').disabled = true;
+            } catch (e) {
+                document.getElementById('ok').textContent = 'Denied — check browser permissions';
+                document.getElementById('ok').style.display = 'block';
+                document.getElementById('ok').style.color = '#e94560';
+            }
+        });
+    </script>
+</body>
+</html>
