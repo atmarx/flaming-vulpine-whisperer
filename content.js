@@ -46,7 +46,7 @@ browser.runtime.onMessage.addListener((msg) => {
             break;
         case 'insert-text':
             hideOverlay();
-            insertText(focusedElement, msg.text);
+            insertText(focusedElement, msg.text + ' ');
             break;
         case 'info':
             showOverlay('info', msg.message);
