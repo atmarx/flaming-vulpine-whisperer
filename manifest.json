@@ -1,0 +1,36 @@
+{
+  "manifest_version": 2,
+  "name": "Flaming Vulpine Whisperer",
+  "version": "1.0.0",
+  "description": "Hold-to-record speech-to-text into any text field using your self-hosted Whisper API",
+  "permissions": [
+    "storage",
+    "<all_urls>"
+  ],
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": true
+  },
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["content.js"],
+    "run_at": "document_idle"
+  }],
+  "browser_action": {
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png"
+    },
+    "default_title": "Flaming Vulpine Whisperer"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": false
+  },
+  "commands": {
+    "toggle-recording": {
+      "suggested_key": { "default": "Alt+R" },
+      "description": "Toggle voice recording"
+    }
+  }
+}
