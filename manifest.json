@@ -26,11 +26,5 @@
   "options_ui": {
     "page": "options.html",
     "open_in_tab": false
-  },
-  "commands": {
-    "toggle-recording": {
-      "suggested_key": { "default": "Alt+R" },
-      "description": "Toggle voice recording"
-    }
   }
 }

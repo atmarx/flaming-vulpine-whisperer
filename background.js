@@ -14,17 +14,6 @@ browser.storage.onChanged.addListener((changes) => {
     if (changes.language) settings.language = changes.language.newValue || '';
 });
 
-// Toggle via commands API — relay to content script
-browser.commands.onCommand.addListener((command) => {
-    if (command === 'toggle-recording') {
-        browser.tabs.query({ active: true, currentWindow: true }).then(tabs => {
-            if (tabs[0]) {
-                browser.tabs.sendMessage(tabs[0].id, { action: 'toggle-recording' }).catch(() => {});
-            }
-        });
-    }
-});
-
 // Browser action click: toggle or open options
 browser.browserAction.onClicked.addListener((tab) => {
     if (!settings.endpoint) {
