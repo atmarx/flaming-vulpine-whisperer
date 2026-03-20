@@ -1,11 +1,5 @@
 // Flaming Vulpine Whisperer — Background Script
-// Handles audio recording and Whisper API communication
-
-let isRecording = false;
-let mediaRecorder = null;
-let audioChunks = [];
-let recordingTabId = null;
-let recordingStartTime = null;
+// Receives audio from content script, calls Whisper API, returns text.
 
 // Settings (loaded from storage, updated via onChanged)
 let settings = { endpoint: '', language: '' };
@@ -20,46 +14,37 @@ browser.storage.onChanged.addListener((changes) => {
     if (changes.language) settings.language = changes.language.newValue || '';
 });
 
-// Toggle via commands API (Alt+R press-to-toggle fallback)
+// Toggle via commands API — relay to content script
 browser.commands.onCommand.addListener((command) => {
     if (command === 'toggle-recording') {
         browser.tabs.query({ active: true, currentWindow: true }).then(tabs => {
             if (tabs[0]) {
-                if (isRecording) {
-                    stopRecording();
-                } else {
-                    startRecording(tabs[0].id);
-                }
+                browser.tabs.sendMessage(tabs[0].id, { action: 'toggle-recording' }).catch(() => {});
             }
         });
     }
 });
 
-// Messages from content script (hold-to-record)
-browser.runtime.onMessage.addListener((msg, sender) => {
-    if (msg.action === 'start-recording' && sender.tab) {
-        startRecording(sender.tab.id);
-    } else if (msg.action === 'stop-recording') {
-        stopRecording();
-    }
-});
-
-// Browser action click: toggle recording or open options if no endpoint
+// Browser action click: toggle or open options
 browser.browserAction.onClicked.addListener((tab) => {
     if (!settings.endpoint) {
         browser.runtime.openOptionsPage();
         return;
     }
-    if (isRecording) {
-        stopRecording();
-    } else {
-        startRecording(tab.id);
+    browser.tabs.sendMessage(tab.id, { action: 'toggle-recording' }).catch(() => {});
+});
+
+// Messages from content script
+browser.runtime.onMessage.addListener((msg, sender) => {
+    if (msg.action === 'transcribe') {
+        transcribe(msg.audio, msg.mimeType, sender.tab.id);
+    } else if (msg.action === 'check-endpoint') {
+        // Content script checks if endpoint is configured before recording
+        return Promise.resolve({ configured: !!settings.endpoint });
     }
 });
 
-async function startRecording(tabId) {
-    if (isRecording) return;
-
+async function transcribe(base64Audio, mimeType, tabId) {
     if (!settings.endpoint) {
         sendToTab(tabId, {
             action: 'error',
@@ -70,75 +55,14 @@ async function startRecording(tabId) {
     }
 
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-                channelCount: 1,
-                sampleRate: 16000,
-                echoCancellation: true,
-                noiseSuppression: true
-            }
-        });
-
-        const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-            ? 'audio/webm;codecs=opus'
-            : 'audio/webm';
-
-        mediaRecorder = new MediaRecorder(stream, { mimeType });
-        audioChunks = [];
-        recordingTabId = tabId;
-        recordingStartTime = Date.now();
-
-        mediaRecorder.ondataavailable = (e) => {
-            if (e.data.size > 0) audioChunks.push(e.data);
-        };
-
-        mediaRecorder.onstop = async () => {
-            stream.getTracks().forEach(t => t.stop());
-            isRecording = false;
-
-            // Discard recordings shorter than 300ms
-            const duration = Date.now() - recordingStartTime;
-            if (duration < 300) {
-                sendToTab(recordingTabId, { action: 'cancelled' });
-                return;
-            }
-
-            sendToTab(recordingTabId, { action: 'processing' });
-
-            const blob = new Blob(audioChunks, { type: mimeType });
-            await transcribe(blob);
-        };
-
-        mediaRecorder.start(100);
-        isRecording = true;
-        sendToTab(tabId, { action: 'recording-started' });
-
-    } catch (err) {
-        console.error('Mic error:', err);
-        if (err.name === 'NotAllowedError') {
-            // Open the mic permission prompt page
-            sendToTab(tabId, {
-                action: 'error',
-                message: 'Microphone permission needed — opening prompt...'
-            });
-            browser.tabs.create({ url: browser.runtime.getURL('mic-prompt.html') });
-        } else {
-            sendToTab(tabId, {
-                action: 'error',
-                message: err.message || 'Failed to start recording'
-            });
+        // Decode base64 back to blob
+        const binary = atob(base64Audio);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
         }
-    }
-}
+        const blob = new Blob([bytes], { type: mimeType });
 
-function stopRecording() {
-    if (mediaRecorder && mediaRecorder.state === 'recording') {
-        mediaRecorder.stop();
-    }
-}
-
-async function transcribe(blob) {
-    try {
         const formData = new FormData();
         formData.append('file', blob, 'recording.webm');
         formData.append('response_format', 'json');
@@ -146,7 +70,6 @@ async function transcribe(blob) {
             formData.append('language', settings.language);
         }
 
-        // Normalize endpoint: strip trailing slash, append path
         const base = settings.endpoint.replace(/\/+$/, '');
         const url = base + '/v1/audio/transcriptions';
 
@@ -164,14 +87,14 @@ async function transcribe(blob) {
         const text = data.text?.trim() || '';
 
         if (text) {
-            sendToTab(recordingTabId, { action: 'insert-text', text });
+            sendToTab(tabId, { action: 'insert-text', text });
         } else {
-            sendToTab(recordingTabId, { action: 'info', message: 'No speech detected' });
+            sendToTab(tabId, { action: 'info', message: 'No speech detected' });
         }
 
     } catch (err) {
         console.error('Transcription error:', err);
-        sendToTab(recordingTabId, {
+        sendToTab(tabId, {
             action: 'error',
             message: err.message || 'Transcription failed'
         });
@@ -180,7 +103,5 @@ async function transcribe(blob) {
 
 function sendToTab(tabId, msg) {
     if (!tabId) return;
-    browser.tabs.sendMessage(tabId, msg).catch(() => {
-        // Content script not available (restricted page, etc.)
-    });
+    browser.tabs.sendMessage(tabId, msg).catch(() => {});
 }
