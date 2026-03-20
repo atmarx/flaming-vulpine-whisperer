@@ -64,4 +64,4 @@ Any server that implements the OpenAI `/v1/audio/transcriptions` endpoint:
 
 ## License
 
-MIT
+Apache License 2.0 — see [LICENSE](LICENSE)
